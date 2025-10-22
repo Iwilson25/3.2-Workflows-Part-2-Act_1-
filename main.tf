@@ -3,6 +3,7 @@ provider "aws" {
 }
 
 terraform {
+  # TFLint Fix: Required versions for CLI and Provider
   required_version = ">= 1.0.0"
 
   backend "s3" {
@@ -22,6 +23,7 @@ terraform {
 data "aws_caller_identity" "current" {}
 
 locals {
+  # TFLint Fix: Modern HCL expression
   name_prefix = split("/", data.aws_caller_identity.current.arn)[1]
   account_id  = data.aws_caller_identity.current.account_id
 }
@@ -64,15 +66,19 @@ resource "aws_kms_key" "s3_key" {
 }
 
 # ----------------------------------------------------
-# SQS QUEUE FOR EVENT NOTIFICATIONS (FIX: CKV2_AWS_62)
+# SQS QUEUE FOR EVENT NOTIFICATIONS (FIX: CKV2_AWS_62, CKV_AWS_27)
 # ----------------------------------------------------
 
-# New: Dummy SQS Queue as a target for bucket notifications
+# FIX: CKV_AWS_27 - Ensure SQS queue is encrypted with KMS
 resource "aws_sqs_queue" "s3_notifications" {
   name = "${local.name_prefix}-s3-notifications"
+
+  # Configuration to enable SSE-KMS using the key defined above
+  kms_master_key_id       = aws_kms_key.s3_key.arn
+  sqs_managed_sse_enabled = false
 }
 
-# New: SQS Queue Policy to allow S3 to send messages
+# SQS Queue Policy to allow S3 to send messages
 resource "aws_sqs_queue_policy" "s3_notification_policy" {
   queue_url = aws_sqs_queue.s3_notifications.id
 
@@ -99,7 +105,7 @@ resource "aws_sqs_queue_policy" "s3_notification_policy" {
 }
 
 # ----------------------------------------------------
-# S3 LOG BUCKET (FIX: CKV_AWS_145, CKV_AWS_21, CKV2_AWS_61)
+# S3 LOG BUCKET (CKV_AWS_145, CKV_AWS_21, CKV2_AWS_61)
 # ----------------------------------------------------
 
 resource "aws_s3_bucket" "log_bucket" {
@@ -138,7 +144,7 @@ resource "aws_s3_bucket_public_access_block" "log_bucket_pab" {
 }
 
 # ----------------------------------------------------
-# MAIN S3 BUCKET (FIX: CKV_AWS_145, CKV_AWS_18, CKV2_AWS_6, CKV_AWS_21, CKV2_AWS_61)
+# MAIN S3 BUCKET 
 # ----------------------------------------------------
 
 resource "aws_s3_bucket" "s3_tf" {
@@ -190,37 +196,27 @@ resource "aws_s3_bucket_logging" "s3_tf_logging" {
   target_prefix = "log/"
 }
 
-# FIX: CKV2_AWS_62 - Event notification configuration for both buckets
+# CKV2_AWS_62 - Event notification configuration for both buckets
 resource "aws_s3_bucket_notification" "bucket_notifications" {
   bucket = aws_s3_bucket.s3_tf.id
 
-  # Notification for the main bucket
   queue {
     id        = "main-s3-events"
     queue_arn = aws_sqs_queue.s3_notifications.arn
     events    = ["s3:ObjectCreated:*"]
   }
-
-  # This resource needs to be defined for the log bucket as well, 
-  # or you can target the main bucket. Since the check is against both:
-  # It's best practice to separate notifications, but one resource can 
-  # sometimes pass the check if it targets one bucket. To be explicit, 
-  # we'll add a second notification block for the log bucket.
 }
 
 resource "aws_s3_bucket_notification" "log_bucket_notifications" {
   bucket = aws_s3_bucket.log_bucket.id
 
-  # Notification for the log bucket
   queue {
     id        = "log-s3-events"
     queue_arn = aws_sqs_queue.s3_notifications.arn
     events    = ["s3:ObjectCreated:*"]
   }
-  # Ensures the SQS policy dependency is met
   depends_on = [aws_sqs_queue_policy.s3_notification_policy]
 }
 
-# NOTE: CKV_AWS_144 (Cross-region replication) is the only check remaining 
-# that is not a quick fix. It requires a significant DR setup and is typically 
-# suppressed or implemented only if necessary.
+# NOTE: CKV_AWS_144 (Cross-region replication) is a business/DR requirement 
+# that remains. It is the last major check.
