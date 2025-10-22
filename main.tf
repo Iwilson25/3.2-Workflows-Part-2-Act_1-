@@ -23,7 +23,7 @@ data "aws_caller_identity" "current" {}
 
 locals {
   name_prefix = split("/", data.aws_caller_identity.current.arn)[1]
-  account_id = data.aws_caller_identity.current.account_id
+  account_id  = data.aws_caller_identity.current.account_id
 }
 
 # ----------------------------------------------------
@@ -38,7 +38,7 @@ resource "aws_s3_bucket" "log_bucket" {
 
 # FIX 1: New resource for Public Access Block for log_bucket
 resource "aws_s3_bucket_public_access_block" "log_bucket_pab" {
-  bucket = aws_s3_bucket.log_bucket.id
+  bucket                  = aws_s3_bucket.log_bucket.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -85,10 +85,10 @@ resource "aws_s3_bucket" "s3_tf" {
 
     # FIX 4: Corrected argument name from 'noncurrent_days' to 'days'
     noncurrent_version_expiration {
-      days = 90 
+      days = 90
     }
   }
-  
+
   tags = {
     Name = "${local.name_prefix}-s3-tf-bkt"
   }
@@ -96,7 +96,7 @@ resource "aws_s3_bucket" "s3_tf" {
 
 # FIX 3: New resource for Public Access Block for s3_tf
 resource "aws_s3_bucket_public_access_block" "s3_tf_pab" {
-  bucket = aws_s3_bucket.s3_tf.id
+  bucket                  = aws_s3_bucket.s3_tf.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
